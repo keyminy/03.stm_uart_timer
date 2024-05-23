@@ -41,6 +41,9 @@
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
+TIM_HandleTypeDef htim2;
+TIM_HandleTypeDef htim11;
+
 UART_HandleTypeDef huart2;
 
 /* Definitions for defaultTask */
@@ -81,6 +84,8 @@ const osThreadAttr_t myTask04_attributes = {
 /* USER CODE BEGIN PV */
 
 uint8_t rxData;
+volatile int TIM2_1ms_counter = 0;
+
 
 /* USER CODE END PV */
 
@@ -88,6 +93,8 @@ uint8_t rxData;
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_USART2_UART_Init(void);
+static void MX_TIM11_Init(void);
+static void MX_TIM2_Init(void);
 void StartDefaultTask(void *argument);
 void StartTask01(void *argument);
 void StartTask02(void *argument);
@@ -106,8 +113,10 @@ extern void flower_on(void);
 extern void flower_off(void);
 extern void ledbar0_toggle(void);
 extern void led_main(void);
-extern void button0_check(void);
-extern void pc_command_processing();
+extern void button_check(void);
+extern void pc_command_processing(void);
+extern void delay_us(unsigned int us);
+extern void DHT11_Init(void);
 
 
 /* USER CODE END PFP */
@@ -174,9 +183,14 @@ int main(void)
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
   MX_USART2_UART_Init();
+  MX_TIM11_Init();
+  MX_TIM2_Init();
   /* USER CODE BEGIN 2 */
   HAL_UART_Receive_IT(&huart2, &rxData, 1); // assign RX INT
-  printf("MX_USART2_UART_Init end!!!!!\n");
+  // activate timer interrupt
+  HAL_TIM_Base_Start_IT(&htim11);
+  HAL_TIM_Base_Start_IT(&htim2);
+  DHT11_Init();
   /* USER CODE END 2 */
 
   /* Init scheduler */
@@ -312,6 +326,82 @@ void SystemClock_Config(void)
 }
 
 /**
+  * @brief TIM2 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_TIM2_Init(void)
+{
+
+  /* USER CODE BEGIN TIM2_Init 0 */
+
+  /* USER CODE END TIM2_Init 0 */
+
+  TIM_ClockConfigTypeDef sClockSourceConfig = {0};
+  TIM_MasterConfigTypeDef sMasterConfig = {0};
+
+  /* USER CODE BEGIN TIM2_Init 1 */
+
+  /* USER CODE END TIM2_Init 1 */
+  htim2.Instance = TIM2;
+  htim2.Init.Prescaler = 84-1;
+  htim2.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim2.Init.Period = 1000-1;
+  htim2.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim2.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  if (HAL_TIM_Base_Init(&htim2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
+  if (HAL_TIM_ConfigClockSource(&htim2, &sClockSourceConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
+  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
+  if (HAL_TIMEx_MasterConfigSynchronization(&htim2, &sMasterConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM2_Init 2 */
+
+  /* USER CODE END TIM2_Init 2 */
+
+}
+
+/**
+  * @brief TIM11 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_TIM11_Init(void)
+{
+
+  /* USER CODE BEGIN TIM11_Init 0 */
+
+  /* USER CODE END TIM11_Init 0 */
+
+  /* USER CODE BEGIN TIM11_Init 1 */
+
+  /* USER CODE END TIM11_Init 1 */
+  htim11.Instance = TIM11;
+  htim11.Init.Prescaler = 84-1;
+  htim11.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim11.Init.Period = 65535;
+  htim11.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim11.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  if (HAL_TIM_Base_Init(&htim11) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM11_Init 2 */
+
+  /* USER CODE END TIM11_Init 2 */
+
+}
+
+/**
   * @brief USART2 Initialization Function
   * @param None
   * @retval None
@@ -360,7 +450,7 @@ static void MX_GPIO_Init(void)
   __HAL_RCC_GPIOB_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(LD2_GPIO_Port, LD2_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOA, DHT11_Pin|LD2_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOB, LED0_Pin|LED1_Pin|LED2_Pin|LED3_Pin
@@ -378,12 +468,12 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
 
-  /*Configure GPIO pin : LD2_Pin */
-  GPIO_InitStruct.Pin = LD2_Pin;
+  /*Configure GPIO pins : DHT11_Pin LD2_Pin */
+  GPIO_InitStruct.Pin = DHT11_Pin|LD2_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(LD2_GPIO_Port, &GPIO_InitStruct);
+  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
   /*Configure GPIO pins : LED0_Pin LED1_Pin LED2_Pin LED3_Pin
                            LED4_Pin LED5_Pin LED6_Pin LED7_Pin */
@@ -413,7 +503,7 @@ void StartDefaultTask(void *argument)
   /* Infinite loop */
   for(;;)
   {
-	  pc_command_processing();
+	  //pc_command_processing();
 	  //button_check();
     osDelay(1);
   }
@@ -433,7 +523,12 @@ void StartTask01(void *argument)
   /* Infinite loop */
   for(;;)
   {
-	  //led2_toggle();
+	if(TIM2_1ms_counter >= 50){
+		// toggle led every 50ms
+		TIM2_1ms_counter = 0; // clear;
+		led2_toggle();
+	}
+	// led2_toggle();
     osDelay(1); // The OS does not go to sleep.
   }
   /* USER CODE END StartTask01 */
@@ -452,8 +547,15 @@ void StartTask02(void *argument)
   /* Infinite loop */
   for(;;)
   {
-	//led_main();
-    osDelay(1);
+	  DHT11_processing();
+	  osDelay(1500); // 1500ms
+	/*
+	  led_all_on();
+	  delay_us(1000); // 1ms
+	  led_all_off();
+	  delay_us(1000); // 1ms
+    	osDelay(1);
+    */
   }
   /* USER CODE END StartTask02 */
 }
@@ -507,13 +609,16 @@ void StartTask04(void *argument)
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
   /* USER CODE BEGIN Callback 0 */
-
+////////
   /* USER CODE END Callback 0 */
   if (htim->Instance == TIM10) {
     HAL_IncTick();
   }
   /* USER CODE BEGIN Callback 1 */
-
+////////
+	if(htim->Instance == TIM2){
+		TIM2_1ms_counter++;
+	}
   /* USER CODE END Callback 1 */
 }
 
