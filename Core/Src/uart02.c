@@ -11,9 +11,9 @@ uint8_t rx_buff[COMMAND_NUMBER][COMMAND_LENGTH];
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
 {
 	//static변수는 함수가 다음에 실행되어도,그 값을 기억하기위해 사용한다.
-	static unsigned int i;
+	volatile static int i;
 	if(huart == &huart2){
-		unsigned char data;
+		volatile unsigned char data;
 		data = rxData;
 
 		//printf("%c",data);
@@ -24,6 +24,7 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
 			rear %= COMMAND_NUMBER;
 		}else{
 			rx_buff[rear][i++] = data;
+			if(i >= COMMAND_NUMBER) i = 0; // prevent buffer overflow
 		}
 
 		//그 다음 인터럽트를 받게 해줘야한다.
